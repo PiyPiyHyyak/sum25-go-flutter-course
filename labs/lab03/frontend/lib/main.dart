@@ -19,70 +19,26 @@ class MyApp extends StatelessWidget {
           create: (_) => ApiService(),
           dispose: (_, apiService) => apiService.dispose(),
         ),
-        ChangeNotifierProxyProvider<ApiService, ChatProvider>(
-          create: (context) => ChatProvider(
-            Provider.of<ApiService>(context, listen: false),
-          ),
-          update: (context, apiService, previous) =>
-              previous ?? ChatProvider(apiService),
+        ChangeNotifierProvider<ChatProvider>(
+          create: (context) => ChatProvider(context.read<ApiService>()),
         ),
       ],
       child: MaterialApp(
         title: 'Lab 03 REST API Chat',
         theme: ThemeData(
           primarySwatch: Colors.blue,
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blue,
-            brightness: Brightness.light,
-          ),
+          colorScheme:
+              ColorScheme.fromSwatch().copyWith(secondary: Colors.orange),
           appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.transparent,
+            backgroundColor: Colors.blue,
             foregroundColor: Colors.white,
-            elevation: 0,
           ),
           elevatedButtonTheme: ElevatedButtonThemeData(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-              elevation: 8,
-              shadowColor: Colors.orange.withOpacity(0.5),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
             ),
           ),
-          floatingActionButtonTheme: FloatingActionButtonThemeData(
-            backgroundColor: Colors.orange,
-            foregroundColor: Colors.white,
-            elevation: 12,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-          cardTheme: const CardThemeData(
-            elevation: 8,
-            shadowColor: Colors.grey,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(16)),
-            ),
-          ),
-          inputDecorationTheme: InputDecorationTheme(
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.blue.withOpacity(0.3)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.blue.withOpacity(0.3)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.blue, width: 2),
-            ),
-            filled: true,
-            fillColor: Colors.white.withOpacity(0.9),
-          ),
+          useMaterial3: true,
         ),
         home: const ChatScreen(),
       ),
@@ -90,7 +46,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Provider class for managing app state
+
 class ChatProvider extends ChangeNotifier {
   final ApiService _apiService;
   List<Message> _messages = [];
@@ -109,9 +65,10 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _messages = await _apiService.getMessages();
+      final msgs = await _apiService.getMessages();
+      _messages = msgs;
     } catch (e) {
-      _error = e.toString();
+      _error = 'Failed to load: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -120,40 +77,37 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> createMessage(CreateMessageRequest request) async {
     try {
-      final message = await _apiService.createMessage(request);
-      _messages.add(message);
+      final newMsg = await _apiService.createMessage(request);
+      _messages.insert(0, newMsg);
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
+      _error = 'Failed to create: $e';
       notifyListeners();
-      rethrow;
     }
   }
 
   Future<void> updateMessage(int id, UpdateMessageRequest request) async {
     try {
-      final updatedMessage = await _apiService.updateMessage(id, request);
-      final index = _messages.indexWhere((msg) => msg.id == id);
+      final updatedMsg = await _apiService.updateMessage(id, request);
+      final index = _messages.indexWhere((m) => m.id == id);
       if (index != -1) {
-        _messages[index] = updatedMessage;
+        _messages[index] = updatedMsg;
         notifyListeners();
       }
     } catch (e) {
-      _error = e.toString();
+      _error = 'Failed to update: $e';
       notifyListeners();
-      rethrow;
     }
   }
 
   Future<void> deleteMessage(int id) async {
     try {
       await _apiService.deleteMessage(id);
-      _messages.removeWhere((msg) => msg.id == id);
+      _messages.removeWhere((m) => m.id == id);
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
+      _error = 'Failed to delete: $e';
       notifyListeners();
-      rethrow;
     }
   }
 
