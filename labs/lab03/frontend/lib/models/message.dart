@@ -1,3 +1,9 @@
+// If you want to use freezed, you can use the following command:
+// dart pub add freezed_annotation
+// dart pub add json_annotation
+// dart pub add build_runner
+// dart run build_runner build
+
 class Message {
   final int id;
   final String username;
@@ -13,13 +19,13 @@ class Message {
 
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
-      id: json['id'] as int,
-      username: json['username'] as String,
-      content: json['content'] as String,
-      timestamp: DateTime.parse(json['timestamp'] as String),
+      id: json['id'],
+      username: json['username'],
+      content: json['content'],
+      timestamp: DateTime.parse(json['timestamp']),
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -33,7 +39,7 @@ class Message {
 class CreateMessageRequest {
   final String username;
   final String content;
-  
+
   CreateMessageRequest({
     required this.username,
     required this.content,
@@ -47,12 +53,8 @@ class CreateMessageRequest {
   }
 
   String? validate() {
-    if (username.trim().isEmpty) {
-      return "Username is required";
-    }
-    if (content.trim().isEmpty) {
-      return "Content is required";
-    }
+    if (username.isEmpty) return "Username is required";
+    if (content.isEmpty) return "Content is required";
     return null;
   }
 }
@@ -61,7 +63,7 @@ class UpdateMessageRequest {
   final String content;
 
   UpdateMessageRequest({
-    required this.content
+    required this.content,
   });
 
   Map<String, dynamic> toJson() {
@@ -71,9 +73,7 @@ class UpdateMessageRequest {
   }
 
   String? validate() {
-    if (content.trim().isEmpty) {
-      return "Content is required";
-    }
+    if (content.isEmpty) return "Content is required";
     return null;
   }
 }
@@ -90,11 +90,10 @@ class HTTPStatusResponse {
   });
 
   factory HTTPStatusResponse.fromJson(Map<String, dynamic> json) {
-    final statusJson = json['status'] ?? {};
     return HTTPStatusResponse(
-      statusCode: statusJson['statusCode'] ?? 0,
-      imageUrl: statusJson['imageUrl'] ?? '',
-      description: statusJson['description'] ?? '',
+      statusCode: json['status_code'],
+      imageUrl: json['image_url'],
+      description: json['description'],
     );
   }
 }
@@ -114,12 +113,12 @@ class ApiResponse<T> {
     Map<String, dynamic> json,
     T Function(Map<String, dynamic>)? fromJsonT,
   ) {
-    return ApiResponse(
-      success: json['success'] as bool,
+    return ApiResponse<T>(
+      success: json['success'],
       data: json['data'] != null && fromJsonT != null
-          ? fromJsonT(json['data'] as Map<String, dynamic>)
-          : null,
-      error: json['error'] as String?,
+          ? fromJsonT(json['data'])
+          : json['data'],
+      error: json['error'],
     );
   }
 }
