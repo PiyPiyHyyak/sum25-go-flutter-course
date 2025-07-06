@@ -1,71 +1,90 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/message.dart';
+import 'dart:async';
 
 class ApiService {
   static const String baseUrl = 'http://localhost:8080';
   static const Duration timeout = Duration(seconds: 30);
+
   late http.Client _client;
 
-  ApiService() {
-    _client = http.Client();
-  }
+  ApiService({http.Client? client}) : _client = client ?? http.Client();
 
   void dispose() {
     _client.close();
   }
 
-  Map<String, String> _getHeaders() {
-    return {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-  }
+  Map<String, String> _getHeaders() => {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
 
   T _handleResponse<T>(
-      http.Response response, T Function(Map<String, dynamic>) fromJson) {
-    if (response.statusCode >= 200 && response.statusCode <= 299) {
-      final decodedData = jsonDecode(response.body);
-      return fromJson(decodedData);
-    } else if (response.statusCode >= 400 && response.statusCode <= 499) {
-      throw ValidationException('Client error: ${response.body}');
-    } else if (response.statusCode >= 500 && response.statusCode <= 599) {
-      throw ServerException('Server error: ${response.statusCode}');
+    http.Response response,
+    T Function(Map<String, dynamic>) fromJson,
+  ) {
+    final status = response.statusCode;
+
+    if (response.body.isEmpty) {
+      throw ApiException('Unexpected API response');
+    }
+
+    final data = json.decode(response.body);
+
+    if (status >= 200 && status < 300) {
+      return fromJson(data);
+    } 
+    throw UnimplementedError();
+  }
+
+  dynamic _handleDynamicResponse(http.Response response) {
+    final status = response.statusCode;
+
+    if (response.body.isEmpty) {
+      throw ApiException('Unexpected API response');
+    }
+
+    final data = json.decode(response.body);
+
+    if (status >= 200 && status < 300) {
+      return data;
+    } else if (status >= 400 && status < 500) {
+      throw ValidationException(data['message'] ?? 'Client error');
+    } else if (status >= 500 && status < 600) {
+      throw ServerException('Server error: ${response.reasonPhrase}');
     } else {
-      throw ApiException('Unexpected error: ${response.statusCode}');
+      throw UnimplementedError();
     }
   }
 
   Future<List<Message>> getMessages() async {
     try {
       final response = await _client
-          .get(
-            Uri.parse('$baseUrl/api/messages'),
-            headers: _getHeaders(),
-          )
+          .get(Uri.parse('$baseUrl/api/messages'), headers: _getHeaders())
           .timeout(timeout);
 
-      return _handleResponse(response, (json) {
-        final apiResponse = ApiResponse.fromJson(json, null);
-        if (apiResponse.success && apiResponse.data != null) {
-          return (apiResponse.data as List)
-              .map((messageJson) => Message.fromJson(messageJson))
-              .toList();
-        }
-        throw ApiException(apiResponse.error ?? 'Unknown error');
-      });
-    } catch (e) {
-      if (e is ApiException) rethrow;
-      throw NetworkException('Network error: $e');
+      final data = _handleDynamicResponse(response);
+
+      final list = data['messages'];
+      if (list is! List) {
+        throw UnimplementedError();
+      }
+
+      return list.map<Message>((item) => Message.fromJson(item)).toList();
+    } on SocketException {
+      throw NetworkException('No internet connection.');
+    } on TimeoutException {
+      throw NetworkException('Request timed out.');
     }
+    throw UnimplementedError();
   }
 
   Future<Message> createMessage(CreateMessageRequest request) async {
-    final validation = request.validate();
-    if (validation != null) {
-      throw ValidationException(validation);
+    final validationError = request.validate();
+    if (validationError != null) {
+      throw ValidationException(validationError);
     }
 
     try {
@@ -73,28 +92,27 @@ class ApiService {
           .post(
             Uri.parse('$baseUrl/api/messages'),
             headers: _getHeaders(),
-            body: jsonEncode(request.toJson()),
+            body: json.encode(request.toJson()),
           )
           .timeout(timeout);
+      final parsed = _handleResponse<Map<String, dynamic>>(
+        response,
+        (json) => json,
+      );
 
-      return _handleResponse(response, (json) {
-        final apiResponse =
-            ApiResponse.fromJson(json, (data) => Message.fromJson(data));
-        if (apiResponse.success && apiResponse.data != null) {
-          return apiResponse.data!;
-        }
-        throw ApiException(apiResponse.error ?? 'Unknown error');
-      });
-    } catch (e) {
-      if (e is ApiException) rethrow;
-      throw NetworkException('Network error: $e');
+      return Message.fromJson(parsed['message']);
+    } on SocketException {
+      throw NetworkException('No internet connection.');
+    } on TimeoutException {
+      throw NetworkException('Request timed out.');
     }
+    throw UnimplementedError();
   }
 
   Future<Message> updateMessage(int id, UpdateMessageRequest request) async {
-    final validation = request.validate();
-    if (validation != null) {
-      throw ValidationException(validation);
+    final validationError = request.validate();
+    if (validationError != null) {
+      throw ValidationException(validationError);
     }
 
     try {
@@ -102,22 +120,22 @@ class ApiService {
           .put(
             Uri.parse('$baseUrl/api/messages/$id'),
             headers: _getHeaders(),
-            body: jsonEncode(request.toJson()),
+            body: json.encode(request.toJson()),
           )
           .timeout(timeout);
 
-      return _handleResponse(response, (json) {
-        final apiResponse =
-            ApiResponse.fromJson(json, (data) => Message.fromJson(data));
-        if (apiResponse.success && apiResponse.data != null) {
-          return apiResponse.data!;
-        }
-        throw ApiException(apiResponse.error ?? 'Unknown error');
-      });
-    } catch (e) {
-      if (e is ApiException) rethrow;
-      throw NetworkException('Network error: $e');
+      final parsed = _handleResponse<Map<String, dynamic>>(
+        response,
+        (json) => json,
+      );
+
+      return Message.fromJson(parsed['message']);
+    } on SocketException {
+      throw NetworkException('No internet connection.');
+    } on TimeoutException {
+      throw NetworkException('Request timed out.');
     }
+    throw UnimplementedError();
   }
 
   Future<void> deleteMessage(int id) async {
@@ -130,87 +148,64 @@ class ApiService {
           .timeout(timeout);
 
       if (response.statusCode != 204) {
-        throw ApiException('Failed to delete message: ${response.statusCode}');
+       throw UnimplementedError();
       }
-    } catch (e) {
-      if (e is ApiException) rethrow;
-      throw NetworkException('Network error: $e');
+
+      return;
+    } on SocketException {
+      throw NetworkException('No internet connection.');
+    } on TimeoutException {
+      throw NetworkException('Request timed out.');
     }
+    throw UnimplementedError();
   }
 
-  Future<HTTPStatusResponse> getHTTPStatus(int statusCode) async {
-    if (kDebugMode && Platform.environment.containsKey('FLUTTER_TEST')) {
-      // Needed for tests to pass
-      if (statusCode < 100 || statusCode > 599) {
-        throw ValidationException("Invalid code");
-      }
-      return HTTPStatusResponse(
-        statusCode: statusCode,
-        imageUrl: 'https://http.cat/$statusCode',
-        description: 'Test Status',
-      );
-    }
-
-    try {
-      final response = await _client
-          .get(
-            Uri.parse('$baseUrl/api/status/$statusCode'),
-            headers: _getHeaders(),
-          )
-          .timeout(timeout);
-
-      return _handleResponse(response, (json) {
-        final apiResponse = ApiResponse.fromJson(
-            json, (data) => HTTPStatusResponse.fromJson(data));
-        if (apiResponse.success && apiResponse.data != null) {
-          return apiResponse.data!;
-        }
-        throw ApiException(apiResponse.error ?? 'Unknown error');
-      });
-    } catch (e) {
-      if (e is ApiException) rethrow;
-      throw NetworkException('Network error: $e');
+  Future<HTTPStatusResponse> getHTTPStatus(int code) async {
+  final response = await http.get(Uri.parse('$baseUrl/api/status/$code'));
+    if (response.statusCode == 200) {
+      final jsonMap = jsonDecode(response.body);
+      return HTTPStatusResponse.fromJson(jsonMap);
+    } else {
+      throw ApiException('Failed to fetch HTTP status for code $code');
     }
   }
 
   Future<Map<String, dynamic>> healthCheck() async {
     try {
       final response = await _client
-          .get(
-            Uri.parse('$baseUrl/api/health'),
-            headers: _getHeaders(),
-          )
+          .get(Uri.parse('$baseUrl/api/health'), headers: _getHeaders())
           .timeout(timeout);
 
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+      if (response.body.isEmpty) {
+        throw ApiException('Empty response from health check');
       }
-      throw ApiException('Health check failed: ${response.statusCode}');
-    } catch (e) {
-      if (e is ApiException) rethrow;
-      throw NetworkException('Network error: $e');
+
+      return json.decode(response.body);
+    } on SocketException {
+      throw NetworkException('No internet connection.');
+    } on TimeoutException {
+      throw NetworkException('Request timed out.');
     }
   }
 }
 
-// Custom exceptions
 class ApiException implements Exception {
   final String message;
-
   ApiException(this.message);
 
   @override
   String toString() => 'ApiException: $message';
 }
 
+
 class NetworkException extends ApiException {
-  NetworkException(super.message);
+  NetworkException(String message) : super(message);
 }
 
 class ServerException extends ApiException {
-  ServerException(super.message);
+  ServerException(String message) : super(message);
 }
 
 class ValidationException extends ApiException {
-  ValidationException(super.message);
+  ValidationException(String message) : super(message);
 }

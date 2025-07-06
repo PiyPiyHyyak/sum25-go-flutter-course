@@ -4,21 +4,22 @@ class Message {
   final String content;
   final DateTime timestamp;
 
-  Message(
-      {required this.id,
-      required this.username,
-      required this.content,
-      required this.timestamp});
+  Message({
+    required this.id,
+    required this.username,
+    required this.content,
+    required this.timestamp,
+  });
 
   factory Message.fromJson(Map<String, dynamic> json) {
     return Message(
-      id: json['id'],
-      username: json['username'],
-      content: json['content'],
-      timestamp: DateTime.parse(json['timestamp']),
+      id: json['id'] as int,
+      username: json['username'] as String,
+      content: json['content'] as String,
+      timestamp: DateTime.parse(json['timestamp'] as String),
     );
   }
-
+  
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -32,8 +33,11 @@ class Message {
 class CreateMessageRequest {
   final String username;
   final String content;
-
-  CreateMessageRequest({required this.username, required this.content});
+  
+  CreateMessageRequest({
+    required this.username,
+    required this.content,
+  });
 
   Map<String, dynamic> toJson() {
     return {
@@ -43,10 +47,10 @@ class CreateMessageRequest {
   }
 
   String? validate() {
-    if (username.isEmpty) {
+    if (username.trim().isEmpty) {
       return "Username is required";
     }
-    if (content.isEmpty) {
+    if (content.trim().isEmpty) {
       return "Content is required";
     }
     return null;
@@ -56,7 +60,9 @@ class CreateMessageRequest {
 class UpdateMessageRequest {
   final String content;
 
-  UpdateMessageRequest({required this.content});
+  UpdateMessageRequest({
+    required this.content
+  });
 
   Map<String, dynamic> toJson() {
     return {
@@ -65,7 +71,7 @@ class UpdateMessageRequest {
   }
 
   String? validate() {
-    if (content.isEmpty) {
+    if (content.trim().isEmpty) {
       return "Content is required";
     }
     return null;
@@ -77,16 +83,18 @@ class HTTPStatusResponse {
   final String imageUrl;
   final String description;
 
-  HTTPStatusResponse(
-      {required this.statusCode,
-      required this.imageUrl,
-      required this.description});
+  HTTPStatusResponse({
+    required this.statusCode,
+    required this.imageUrl,
+    required this.description,
+  });
 
   factory HTTPStatusResponse.fromJson(Map<String, dynamic> json) {
+    final statusJson = json['status'] ?? {};
     return HTTPStatusResponse(
-      statusCode: json['status_code'],
-      imageUrl: json['image_url'],
-      description: json['description'],
+      statusCode: statusJson['statusCode'] ?? 0,
+      imageUrl: statusJson['imageUrl'] ?? '',
+      description: statusJson['description'] ?? '',
     );
   }
 }
@@ -96,16 +104,22 @@ class ApiResponse<T> {
   final T? data;
   final String? error;
 
-  ApiResponse({required this.success, this.data, this.error});
+  ApiResponse({
+    required this.success,
+    this.data,
+    this.error,
+  });
 
   factory ApiResponse.fromJson(
-      Map<String, dynamic> json, T Function(Map<String, dynamic>)? fromJsonT) {
-    return ApiResponse<T>(
-      success: json['success'],
+    Map<String, dynamic> json,
+    T Function(Map<String, dynamic>)? fromJsonT,
+  ) {
+    return ApiResponse(
+      success: json['success'] as bool,
       data: json['data'] != null && fromJsonT != null
-          ? fromJsonT(json['data'])
-          : json['data'],
-      error: json['error'],
+          ? fromJsonT(json['data'] as Map<String, dynamic>)
+          : null,
+      error: json['error'] as String?,
     );
   }
 }
