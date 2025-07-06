@@ -1,125 +1,118 @@
-package models
+package storage
 
 import (
 	"testing"
-	"time"
 )
 
-func TestNewMessage(t *testing.T) {
-	// Test creating a new message
-	id := 1
-	username := "testuser"
-	content := "test content"
+func TestNewMemoryStorage(t *testing.T) {
+	storage := NewMemoryStorage()
 
-	message := NewMessage(id, username, content)
+	if storage == nil {
+		t.Fatal("NewMemoryStorage returned nil")
+	}
+
+	count := storage.Count()
+	if count != 0 {
+		t.Errorf("Expected empty storage, got %d messages", count)
+	}
+}
+
+func TestMemoryStorageCRUD(t *testing.T) {
+	storage := NewMemoryStorage()
+
+	// Test Create
+	message, err := storage.Create("testuser", "test content")
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
 
 	if message == nil {
-		t.Fatal("NewMessage returned nil")
+		t.Fatal("Create returned nil message")
 	}
 
-	if message.ID != id {
-		t.Errorf("Expected ID %d, got %d", id, message.ID)
+	// Test GetByID
+	retrieved, err := storage.GetByID(1)
+	if err != nil {
+		t.Fatalf("GetByID failed: %v", err)
 	}
 
-	if message.Username != username {
-		t.Errorf("Expected username %s, got %s", username, message.Username)
+	if retrieved == nil {
+		t.Fatal("GetByID returned nil message")
 	}
 
-	if message.Content != content {
-		t.Errorf("Expected content %s, got %s", content, message.Content)
+	// Test GetAll
+	messages := storage.GetAll()
+	if len(messages) != 1 {
+		t.Errorf("Expected 1 message, got %d", len(messages))
 	}
 
-	// Check if timestamp is recent (within last 5 seconds)
-	now := time.Now()
-	if now.Sub(message.Timestamp) > 5*time.Second {
-		t.Error("Message timestamp is not recent")
-	}
-}
-
-func TestCreateMessageRequestValidation(t *testing.T) {
-	tests := []struct {
-		name      string
-		request   CreateMessageRequest
-		shouldErr bool
-	}{
-		{
-			name: "valid request",
-			request: CreateMessageRequest{
-				Username: "testuser",
-				Content:  "test content",
-			},
-			shouldErr: false,
-		},
-		{
-			name: "empty username",
-			request: CreateMessageRequest{
-				Username: "",
-				Content:  "test content",
-			},
-			shouldErr: true,
-		},
-		{
-			name: "empty content",
-			request: CreateMessageRequest{
-				Username: "testuser",
-				Content:  "",
-			},
-			shouldErr: true,
-		},
-		{
-			name: "both empty",
-			request: CreateMessageRequest{
-				Username: "",
-				Content:  "",
-			},
-			shouldErr: true,
-		},
+	// Test Update
+	updated, err := storage.Update(1, "updated content")
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.request.Validate()
-			if tt.shouldErr && err == nil {
-				t.Error("Expected validation error, got nil")
-			}
-			if !tt.shouldErr && err != nil {
-				t.Errorf("Expected no validation error, got: %v", err)
-			}
-		})
+	if updated == nil {
+		t.Fatal("Update returned nil message")
+	}
+
+	// Test Delete
+	err = storage.Delete(1)
+	if err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	// Verify deletion
+	count := storage.Count()
+	if count != 0 {
+		t.Errorf("Expected empty storage after delete, got %d messages", count)
 	}
 }
 
-func TestUpdateMessageRequestValidation(t *testing.T) {
-	tests := []struct {
-		name      string
-		request   UpdateMessageRequest
-		shouldErr bool
-	}{
-		{
-			name: "valid request",
-			request: UpdateMessageRequest{
-				Content: "updated content",
-			},
-			shouldErr: false,
-		},
-		{
-			name: "empty content",
-			request: UpdateMessageRequest{
-				Content: "",
-			},
-			shouldErr: true,
-		},
+func TestMemoryStorageErrors(t *testing.T) {
+	storage := NewMemoryStorage()
+
+	// Test GetByID with non-existent ID
+	_, err := storage.GetByID(999)
+	if err == nil {
+		t.Error("Expected error for non-existent ID")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.request.Validate()
-			if tt.shouldErr && err == nil {
-				t.Error("Expected validation error, got nil")
+	// Test Update with non-existent ID
+	_, err = storage.Update(999, "content")
+	if err == nil {
+		t.Error("Expected error for updating non-existent message")
+	}
+
+	// Test Delete with non-existent ID
+	err = storage.Delete(999)
+	if err == nil {
+		t.Error("Expected error for deleting non-existent message")
+	}
+}
+
+func TestMemoryStorageConcurrency(t *testing.T) {
+	storage := NewMemoryStorage()
+
+	// Test concurrent writes
+	done := make(chan bool, 10)
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			_, err := storage.Create("user", "content")
+			if err != nil {
+				t.Errorf("Concurrent create failed: %v", err)
 			}
-			if !tt.shouldErr && err != nil {
-				t.Errorf("Expected no validation error, got: %v", err)
-			}
-		})
+			done <- true
+		}(i)
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	count := storage.Count()
+	if count != 10 {
+		t.Errorf("Expected 10 messages after concurrent writes, got %d", count)
 	}
 }
